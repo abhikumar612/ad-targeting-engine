@@ -11,12 +11,16 @@ import (
 	"ad-targeting-engine/internal/storage"
 )
 
+type StoreInterface interface {
+	LoadActiveCampaigns(ctx context.Context) ([]storage.CampaignRow, error)
+}
+
 type Server struct {
-	store *storage.Store
+	store StoreInterface
 	cache *storage.Cache
 }
 
-func New(store *storage.Store, cache *storage.Cache) *Server {
+func New(store StoreInterface, cache *storage.Cache) *Server {
 	return &Server{store: store, cache: cache}
 }
 
@@ -26,7 +30,6 @@ func (s *Server) Start(addr string) {
 	http.ListenAndServe(addr, nil)
 }
 
-// cache refresher loop
 func (s *Server) StartCacheRefresher(ctx context.Context) {
 	go func() {
 		for {
@@ -42,13 +45,11 @@ func (s *Server) StartCacheRefresher(ctx context.Context) {
 	}()
 }
 
-// delivery handler
 func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
 	app := r.URL.Query().Get("app")
 	country := r.URL.Query().Get("country")
 	os := r.URL.Query().Get("os")
 
-	// required params check
 	if app == "" || country == "" || os == "" {
 		http.Error(w, `{"error":"missing required param"}`, http.StatusBadRequest)
 		return

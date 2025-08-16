@@ -37,15 +37,12 @@ func Load() Config {
 
 	// Always use application.yaml
 	v.SetConfigFile("../../env/application.yaml")
-
 	if err := v.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
-
 	v.SetEnvPrefix("APP")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		panic(fmt.Errorf("unable to decode config: %w", err))

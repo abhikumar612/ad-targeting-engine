@@ -6,21 +6,18 @@ import (
 	"slices"
 	"strings"
 
-	"ad-targeting-engine/internal/cache"
 	"ad-targeting-engine/internal/storage"
 )
 
 // Indexes for fast candidate narrowing
 type indexes struct {
-	Campaigns []CampaignWithRules // backing array; indexes reference this
-
+	Campaigns []CampaignWithRules 
 	IncApp     map[string][]int
 	ExcApp     map[string][]int
 	IncOS      map[string][]int
 	ExcOS      map[string][]int
 	IncCountry map[string][]int
 	ExcCountry map[string][]int
-
 	AgnosticApp     []int
 	AgnosticOS      []int
 	AgnosticCountry []int
@@ -29,7 +26,7 @@ type indexes struct {
 type snapshot struct{ idx indexes }
 
 // DeliveryEngine exposes read-only, lock-free match operations.
-type DeliveryEngine struct{ snap cache.Snapshot[snapshot] }
+type DeliveryEngine struct{ snap storage.Snapshot[snapshot] }
 
 func NewEngine() *DeliveryEngine { return &DeliveryEngine{} }
 
@@ -275,14 +272,6 @@ func (s set) list() []int {
 	out := make([]int, 0, len(s))
 	for k := range s {
 		out = append(out, k)
-	}
-	return out
-}
-
-func allIdx(n int) []int {
-	out := make([]int, n)
-	for i := 0; i < n; i++ {
-		out[i] = i
 	}
 	return out
 }
