@@ -1,5 +1,5 @@
 server:
-  log_level: "info"
+  log_level: "error"
 
 postgres:
   host: "prod-db-host"

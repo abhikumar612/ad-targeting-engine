@@ -7,7 +7,7 @@ postgres:
   port: 5432
   user: "postgres"
   password: "postgres"
-  db_name: "ad_db"
+  db_name: "postgres"
   ssl_mode: "disable"
   max_open_conns: 10
   max_idle_conns: 10

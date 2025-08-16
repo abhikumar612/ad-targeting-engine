@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -33,12 +34,16 @@ type Config struct {
 
 func Load() Config {
 	v := viper.New()
-	v.SetConfigName("application")
-	v.SetConfigType("yaml")
-	v.AddConfigPath("configs")
-	_ = v.ReadInConfig() // optional; env can fully configure
+
+	// Always use application.yaml
+	v.SetConfigFile("../../env/application.yaml")
+
+	if err := v.ReadInConfig(); err != nil {
+		panic(fmt.Errorf("fatal error config file: %w", err))
+	}
 
 	v.SetEnvPrefix("APP")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	var cfg Config
@@ -50,12 +55,24 @@ func Load() Config {
 }
 
 func validate(c *Config) {
-	if c.Server.Addr == "" { c.Server.Addr = ":8080" }
-	if c.Postgres.Port == 0 { c.Postgres.Port = 5432 }
-	if c.Postgres.SSLMode == "" { c.Postgres.SSLMode = "disable" }
-	if c.Postgres.MaxOpenConns == 0 { c.Postgres.MaxOpenConns = 10 }
-	if c.Postgres.MaxIdleConns == 0 { c.Postgres.MaxIdleConns = 10 }
-	if c.Listener.ReconnectSeconds <= 0 { c.Listener.ReconnectSeconds = 5 }
+	if c.Server.Addr == "" {
+		c.Server.Addr = ":8080"
+	}
+	if c.Postgres.Port == 0 {
+		c.Postgres.Port = 5432
+	}
+	if c.Postgres.SSLMode == "" {
+		c.Postgres.SSLMode = "disable"
+	}
+	if c.Postgres.MaxOpenConns == 0 {
+		c.Postgres.MaxOpenConns = 10
+	}
+	if c.Postgres.MaxIdleConns == 0 {
+		c.Postgres.MaxIdleConns = 10
+	}
+	if c.Listener.ReconnectSeconds <= 0 {
+		c.Listener.ReconnectSeconds = 5
+	}
 }
 
 func (c Config) DSN() string {
@@ -69,4 +86,6 @@ func (c Config) DSN() string {
 	)
 }
 
-func (c Config) Backoff() time.Duration { return time.Duration(c.Listener.ReconnectSeconds) * time.Second }
+func (c Config) Backoff() time.Duration {
+	return time.Duration(c.Listener.ReconnectSeconds) * time.Second
+}

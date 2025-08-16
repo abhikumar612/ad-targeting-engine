@@ -24,28 +24,21 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (h *DeliveryHandler) Delivery(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	app := strings.TrimSpace(q.Get("app"))
-	country := strings.ToUpper(strings.TrimSpace(q.Get("country")))
-	osName := strings.ToLower(strings.TrimSpace(q.Get("os")))
+	req := engine.MatchRequest{
+		AppID:   strings.ToLower(q.Get("app")),
+		OS:      strings.ToLower(q.Get("os")),
+		Country: strings.ToUpper(q.Get("country")),
+	}
 
-	if app == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing app param"})
-		return
-	}
-	if country == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing country param"})
-		return
-	}
-	if osName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing os param"})
+	ctx := r.Context()
+	campaigns := h.Eng.Match(ctx, req)
+
+	if len(campaigns) == 0 {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	req := engine.MatchRequest{AppID: app, Country: country, OS: osName}
-	matches := h.Eng.Match(r.Context(), req)
-	if len(matches) == 0 {
-		w.WriteHeader(http.StatusNoContent) // 204, no body
-		return
-	}
-	writeJSON(w, http.StatusOK, matches)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(campaigns)
 }
