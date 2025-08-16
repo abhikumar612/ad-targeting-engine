@@ -1,0 +1,11 @@
+server:
+  addr: ":8080"
+  logLevel: "info"
+
+postgres:
+  maxConns: 15
+  host: "nonprod-db"
+  port: 5432
+
+listener:
+  reconnectSeconds: 3

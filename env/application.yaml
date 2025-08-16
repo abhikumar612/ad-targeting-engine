@@ -1,0 +1,17 @@
+server:
+  addr: ":8080"
+  log_level: "info"
+
+postgres:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  db_name: "ad_db"
+  ssl_mode: "disable"
+  max_open_conns: 10
+  max_idle_conns: 10
+
+listener:
+  channel: "tg_data_change"
+  reconnect_seconds: 5

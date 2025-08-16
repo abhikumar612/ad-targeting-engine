@@ -1,0 +1,5 @@
+server:
+  log_level: "debug"
+
+postgres:
+  host: "localhost"
