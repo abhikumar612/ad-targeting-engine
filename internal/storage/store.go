@@ -1,14 +1,16 @@
 package storage
 
 import (
-	"ad-targeting-engine/internal/config"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"ad-targeting-engine/internal/config"
 )
 
 type Store struct {
@@ -31,8 +33,7 @@ type RuleRow struct {
 }
 
 func New(ctx context.Context, cfg config.Config) (*Store, error) {
-	dsn := cfg.DSN()
-	poolCfg, err := pgxpool.ParseConfig(dsn)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse postgres DSN: %w", err)
 	}
@@ -76,7 +77,7 @@ func (s *Store) LoadActiveCampaigns(ctx context.Context) ([]CampaignRow, error) 
 	for rows.Next() {
 		var (
 			id, name, image, cta, status string
-			dim, typ, val sql.NullString
+			dim, typ, val                sql.NullString
 		)
 		if err := rows.Scan(&id, &name, &image, &cta, &status, &dim, &typ, &val); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
@@ -96,9 +97,9 @@ func (s *Store) LoadActiveCampaigns(ctx context.Context) ([]CampaignRow, error) 
 
 		if dim.Valid && typ.Valid && val.Valid {
 			c.Rules = append(c.Rules, RuleRow{
-				Dimension:   dim.String,
+				Dimension:   strings.ToLower(dim.String),
 				IsInclusion: typ.String == "INCLUDE",
-				Values:      []string{val.String},
+				Values:      []string{strings.ToLower(val.String)},
 			})
 		}
 	}
@@ -107,7 +108,6 @@ func (s *Store) LoadActiveCampaigns(ctx context.Context) ([]CampaignRow, error) 
 		return nil, rows.Err()
 	}
 
-	// flatten map → slice
 	out := make([]CampaignRow, 0, len(campaigns))
 	for _, c := range campaigns {
 		out = append(out, *c)

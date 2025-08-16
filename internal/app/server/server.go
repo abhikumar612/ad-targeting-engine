@@ -1,75 +1,105 @@
-package app
+package server
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 	"time"
 
-	"ad-targeting-engine/internal/api"
-	"ad-targeting-engine/internal/config"
-	"ad-targeting-engine/internal/engine"
-	"ad-targeting-engine/internal/listener"
 	"ad-targeting-engine/internal/storage"
-
-	"github.com/rs/zerolog/log"
 )
 
-func Run(cfg config.Config) {
-	rootCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Storage
-	store, err := storage.New(rootCtx, cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("init storage")
-	}
-	defer store.Close()
-
-	// Engine
-	eng := engine.NewEngine()
-	if err := eng.BuildSnapshot(rootCtx, store); err != nil {
-		log.Fatal().Err(err).Msg("initial snapshot build")
-	}
-
-	// HTTP
-	h := api.NewDeliveryHandler(eng)
-	r := api.Router(h)
-
-	srv := &http.Server{
-		Addr:         cfg.Server.Addr,
-		Handler:      r,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 3 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	// Listener (LISTEN/NOTIFY)
-	go listener.ListenAndRefresh(rootCtx, store, eng, cfg.Listener.Channel, cfg.Backoff())
-
-	// Server goroutine
-	go func() {
-		log.Info().Str("addr", cfg.Server.Addr).Msg("http server starting")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("server crashed")
-		}
-	}()
-
-	// Wait for signal
-	waitForSignal()
-	log.Info().Msg("shutdown...")
-
-	// Graceful shutdown
-	shCtx, shCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shCancel()
-	cancel() // stop background goroutines
-	_ = srv.Shutdown(shCtx)
+type Server struct {
+	store *storage.Store
+	cache *storage.Cache
 }
 
-func waitForSignal() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
+func New(store *storage.Store, cache *storage.Cache) *Server {
+	return &Server{store: store, cache: cache}
+}
+
+func (s *Server) Start(addr string) {
+	http.HandleFunc("/v1/delivery", s.handleDelivery)
+	fmt.Println("http server starting on " + addr)
+	http.ListenAndServe(addr, nil)
+}
+
+// cache refresher loop
+func (s *Server) StartCacheRefresher(ctx context.Context) {
+	go func() {
+		for {
+			campaigns, err := s.store.LoadActiveCampaigns(ctx)
+			if err != nil {
+				fmt.Println("error refreshing campaigns:", err)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			s.cache.UpdateCampaigns(campaigns)
+			time.Sleep(30 * time.Second)
+		}
+	}()
+}
+
+// delivery handler
+func (s *Server) handleDelivery(w http.ResponseWriter, r *http.Request) {
+	app := r.URL.Query().Get("app")
+	country := r.URL.Query().Get("country")
+	os := r.URL.Query().Get("os")
+
+	// required params check
+	if app == "" || country == "" || os == "" {
+		http.Error(w, `{"error":"missing required param"}`, http.StatusBadRequest)
+		return
+	}
+
+	req := map[string]string{
+		"appid":   strings.ToLower(r.URL.Query().Get("app")),
+		"country": strings.ToLower(r.URL.Query().Get("country")),
+		"os":      strings.ToLower(r.URL.Query().Get("os")),
+	}
+
+	campaigns := s.cache.GetCampaigns()
+	var matched []storage.CampaignRow
+	for _, c := range campaigns {
+		if matches(c, req) {
+			matched = append(matched, c)
+		}
+	}
+
+	if len(matched) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(matched)
+}
+
+func matches(c storage.CampaignRow, req map[string]string) bool {
+	for _, r := range c.Rules {
+		dim := strings.ToLower(r.Dimension)
+		val, ok := req[dim]
+		if !ok {
+			return false
+		}
+
+		inSet := contains(r.Values, val)
+		if r.IsInclusion && !inSet {
+			return false
+		}
+		if !r.IsInclusion && inSet {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(list []string, val string) bool {
+	for _, v := range list {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
